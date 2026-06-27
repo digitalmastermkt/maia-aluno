@@ -1,0 +1,14 @@
+# MAIA — base enxuta (Claude CLI) — dependencias do NUCLEO
+# Instaladas no venv do bot: /opt/MAIA/bot/venv  (ver tambem bot/requirements.txt)
+# Sem pin de versao: usar a mais recente compativel no momento da instalacao.
+#
+# DELIBERADAMENTE LEVE: a base NAO carrega Whisper local (faster-whisper),
+# embeddings/sqlite-vec nem dependencias de geracao de video. Isso mantem o
+# install rapido e sem fricao. Memoria semantica e geracao pesada entram como
+# UPGRADES pagos (ver upgrades-engine/ e INSTALL-CLAUDE.md).
+
+requests
+google-genai
+pillow
+openai
+python-dotenv

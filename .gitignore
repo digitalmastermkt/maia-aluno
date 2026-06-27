@@ -1,0 +1,41 @@
+# ===== MAIA Aluno — .gitignore =====
+
+# Segredos (NUNCA versionar). Exceto os TEMPLATE/example.
+.env
+*.env
+bot/.env
+!*.env.TEMPLATE
+!*.env.example
+*token*.json
+*secret*.json
+*credential*
+*.key
+*.pem
+*.session
+
+# Virtualenv / bytecode Python
+venv/
+*/venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node
+node_modules/
+
+# .claude materializado na VPS (a base versiona dotclaude/; install.sh materializa .claude/)
+.claude/
+
+# Banco / dados de runtime
+*.sqlite
+bot/inbox/
+bot/outbox/
+bot/logs/
+memory/
+
+# Backups locais
+*.bak
+*.bak.*
+*.bak-*

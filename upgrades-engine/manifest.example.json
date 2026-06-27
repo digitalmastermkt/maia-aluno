@@ -1,0 +1,60 @@
+{
+  "$schema": "https://digitalmaster.dev/maia/manifest.schema.json",
+  "id": "agente-sdr-completo",
+  "nome": "Agente SDR Completo",
+  "versao": "2026.4-upgrade-1",
+  "descricao": "Pacote de upgrade que adiciona o subagente SDR e suas skills de prospeccao e dossie ao núcleo MAIA. Plugavel sem tocar na base.",
+  "fornecedor": "Digital Master / Salatiel Batista",
+  "cerebro_alvo": ["claude", "codex"],
+  "requer_versao_base_minima": "2026.4",
+  "skills": [
+    {
+      "nome": "skill-dossie-sdr",
+      "pasta": "skills/skill-dossie-sdr",
+      "destino_claude": "~/.claude/skills/skill-dossie-sdr",
+      "obrigatoria": true
+    },
+    {
+      "nome": "skill-pagina-vendas",
+      "pasta": "skills/skill-pagina-vendas",
+      "destino_claude": "~/.claude/skills/skill-pagina-vendas",
+      "obrigatoria": false
+    }
+  ],
+  "subagentes": [
+    {
+      "nome": "sdr",
+      "arquivo": "agents/sdr.md",
+      "destino_claude": "~/.claude/agents/sdr.md",
+      "model_padrao": "claude",
+      "fallbacks": ["codex-glm", "codex-gpt"]
+    }
+  ],
+  "arquivos_extra": [
+    {
+      "origem": "data/templates-prospeccao.json",
+      "destino": "~/.maia/data/templates-prospeccao.json"
+    }
+  ],
+  "passos_pos_install": {
+    "claude": [
+      "Nenhum: o runtime autodescobre ~/.claude/skills/*/SKILL.md no proximo turno."
+    ],
+    "codex": [
+      "Registrar a skill em openclaw.json (lista de skills habilitadas).",
+      "Declarar o subagente sdr com seu model + fallbacks em openclaw.json.",
+      "Reiniciar o OpenClaw para recarregar a config."
+    ]
+  },
+  "banco_semantico": {
+    "requer": false,
+    "schema_sql": null,
+    "crons": []
+  },
+  "comercial": {
+    "preco_brl": 297,
+    "entrega": "zip-liberado-no-pagamento",
+    "reembolso": false,
+    "incluido_no_bundle_anual": true
+  }
+}

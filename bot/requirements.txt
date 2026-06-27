@@ -1,0 +1,7 @@
+# MAIA bot — dependencias core (instalar no venv /opt/MAIA/bot/venv)
+# Sem pin de versao: usar a mais recente compativel no momento da instalacao.
+requests
+google-genai
+pillow
+openai
+python-dotenv

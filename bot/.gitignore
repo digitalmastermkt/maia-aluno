@@ -1,0 +1,55 @@
+# ===== Naia bot/ — .gitignore =====
+
+# --- Segredos: NUNCA versionar ---
+.env
+.env.*
+*.env
+# Excecao: o TEMPLATE de env (sem segredos) DEVE ser versionado
+!.env.TEMPLATE
+.calendar_token.json
+*token*.json
+*secret*.json
+*credential*
+*.key
+*.pem
+*.session
+
+# --- Virtualenv / bytecode Python ---
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Dados de runtime (filas, saidas, estado, conversas) ---
+inbox/
+outbox/
+outbox-assets/
+sent/
+processed/
+state/
+logs/
+
+# --- Midia / binarios pesados ---
+audio/
+images/
+tessroot/
+
+# --- Backups locais (permanecem no disco, fora do git) ---
+*.bak
+*.bak.*
+*.bak-*
+*.bkp
+*.bkp-*
+
+# --- Logs soltos ---
+*.log
+
+# --- Estado de runtime ---
+group_sessions.json
+
+# --- Midia adicional (higiene 2026-06-10) ---
+videos/
+documents/
+*.bak_*
