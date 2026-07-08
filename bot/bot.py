@@ -40,6 +40,10 @@ if not TOKEN:
 ALLOWED_USERS = set((env.get('ALLOWED_USERS') or env.get('ADMIN_CHAT_ID') or os.environ.get('ADMIN_CHAT_ID', '')).split(','))
 TMUX_SESSION = env.get('TMUX_SESSION', 'naia')
 TMUX_USER = env.get('TMUX_USER', 'naia')
+# Nome do assistente exibido ao usuario final (white-label). Default: Maia
+ASSISTANT_NAME = env.get('ASSISTANT_NAME') or os.environ.get('ASSISTANT_NAME', 'Maia')
+# Handle minusculo derivado do nome (ex.: @maia) usado nas instrucoes ao usuario
+ASSISTANT_HANDLE = '@' + ASSISTANT_NAME.lower()
 
 for d in (INBOX, OUTBOX, SENT, PROCESSED, STATE, LOGS):
     d.mkdir(parents=True, exist_ok=True)
@@ -192,7 +196,7 @@ def get_group_chat_id():
         return None
 
 def get_group_trigger():
-    return _read_env_value('NAIA_GROUP_TRIGGER', '@naia').strip().lower()
+    return _read_env_value('NAIA_GROUP_TRIGGER', ASSISTANT_HANDLE).strip().lower()
 
 def get_group_user_whitelist():
     """Retorna set de user_ids (str) autorizados a falar no grupo."""
@@ -387,7 +391,7 @@ def _session_cleanup_loop():
                 if not already:
                     _send_group_text(
                         cid,
-                        'Sessao encerrada por inatividade. Pra falar comigo de novo, manda @naia.'
+                        f'Sessao encerrada por inatividade. Pra falar comigo de novo, manda {ASSISTANT_HANDLE}.'
                     )
                     _group_logger.info(
                         f'sessao expirada por timeout chat_id={key} '
@@ -1292,7 +1296,7 @@ def watchdog_loop():
                 cause_line = f'\n\n*Causa provavel:* {cause}' if cause else ''
                 snippet = _clean_pane_for_alert(pane)
                 msg = (
-                    f'⚠️ *Naia silenciosa ha {int(age/60)}min* (msg\\_id={mid}).{cause_line}\n\n'
+                    f'⚠️ *{ASSISTANT_NAME} silenciosa ha {int(age/60)}min* (msg\\_id={mid}).{cause_line}\n\n'
                     f'_Ultimas linhas da tmux:_\n```\n{snippet}\n```'
                 )
                 send_admin_alert(msg)
@@ -2345,7 +2349,7 @@ def handle_admin_group_command(chat_id, msg_id, user_id, text):
         wl = sorted(get_group_user_whitelist())
         trig = get_group_trigger()
         body = (
-            'Status do grupo Naia:\n'
+            f'Status do grupo {ASSISTANT_NAME}:\n'
             f'- chat_id: {gcid if gcid is not None else "(nao capturado ainda)"}\n'
             f'- trigger: "{trig}"\n'
             f'- user_ids whitelisted ({len(wl)}): {", ".join(wl) if wl else "(vazio)"}'
@@ -2497,7 +2501,7 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
         if send_alert:
             if open_membership:
                 alert_body = (
-                    f'Novo participante interagindo no grupo Naia (open_membership=true):\n'
+                    f'Novo participante interagindo no grupo {ASSISTANT_NAME} (open_membership=true):\n'
                     f'- nome: {first_name} {last_name}'.rstrip() + '\n'
                     f'- username: @{username if username else "(sem username)"}\n'
                     f'- user_id: {user_id}\n\n'
@@ -2509,7 +2513,7 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
                 alert_prefix = 'group_open_member'
             else:
                 alert_body = (
-                    f'User novo no grupo Naia:\n'
+                    f'User novo no grupo {ASSISTANT_NAME}:\n'
                     f'- nome: {first_name} {last_name}'.rstrip() + '\n'
                     f'- username: @{username if username else "(sem username)"}\n'
                     f'- user_id: {user_id}\n\n'
@@ -2547,7 +2551,7 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
         if had_session:
             _send_group_text(
                 chat_id,
-                'Sessao encerrada. Pra falar comigo de novo, manda @naia.'
+                f'Sessao encerrada. Pra falar comigo de novo, manda {ASSISTANT_HANDLE}.'
             )
             _group_logger.info(
                 f'sessao encerrada via /sair chat_id={chat_id} user_id={user_id}'
