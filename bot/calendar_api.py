@@ -1,6 +1,6 @@
 """
 calendar_api.py — Wrapper de alto nivel sobre Google Calendar API
-para uso da Naia Master.
+para uso da Maia Master.
 
 Pre-requisitos:
 - /opt/MAIA/bot/.calendar_token.json existente (gerado por calendar_auth.py)
@@ -440,7 +440,7 @@ def find_event_by_extended_prop(
 
 
 # --------------------------------------------------------------------------- #
-# CLI manual (para testes e uso da Naia via subprocess)
+# CLI manual (para testes e uso da Maia via subprocess)
 # --------------------------------------------------------------------------- #
 def _main() -> int:
     import argparse

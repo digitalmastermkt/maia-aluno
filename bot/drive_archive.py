@@ -2,7 +2,7 @@
 """
 drive_archive.py — Camada 2: arquiva midia no Google Drive (scope drive.file).
 
-Estrutura no Drive:  NAIA-Arquivo / <categoria> / <YYYY-MM> / <arquivo>
+Estrutura no Drive:  MAIA-Arquivo / <categoria> / <YYYY-MM> / <arquivo>
 Token: .drive_token.json (gerado por drive_auth_finish.py). Refresh automatico.
 
 Uso como modulo:
@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 BOT_DIR = Path("/opt/MAIA/bot")
 TOKEN_PATH = BOT_DIR / ".drive_token.json"
-ROOT_FOLDER_NAME = "NAIA-Arquivo"
+ROOT_FOLDER_NAME = "MAIA-Arquivo"
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
 _venv_sp = "/opt/MAIA/bot/venv/lib/python3.12/site-packages"
@@ -87,7 +87,7 @@ def _archive_folder_id(service, categoria: str, when: datetime | None = None) ->
 
 
 def upload_file(local_path, categoria: str = "outros", when: datetime | None = None) -> dict:
-    """Sobe um arquivo pro Drive sob NAIA-Arquivo/<categoria>/<YYYY-MM>/.
+    """Sobe um arquivo pro Drive sob MAIA-Arquivo/<categoria>/<YYYY-MM>/.
     Retorna {'id','link','size','name'}. Levanta excecao em falha."""
     p = Path(local_path)
     if not p.is_file():

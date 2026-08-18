@@ -14,7 +14,7 @@ BOT_DIR = Path("/opt/MAIA/bot")
 TOKEN_PATH = BOT_DIR / ".drive_token.json"
 STATE_PATH = BOT_DIR / ".drive_auth_state.json"
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-ROOT_FOLDER_NAME = "NAIA-Arquivo"
+ROOT_FOLDER_NAME = "MAIA-Arquivo"
 
 
 def main() -> int:

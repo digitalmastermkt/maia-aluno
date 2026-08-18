@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Troca o code pelo refresh_token (escopo full drive). Salva .drive_full_token.json (naia).
+"""Troca o code pelo refresh_token (escopo full drive). Salva .drive_full_token.json (maia).
 Uso: venv/bin/python drive_full_auth_finish.py "<CODE>" """
 import json, os, sys
 from pathlib import Path

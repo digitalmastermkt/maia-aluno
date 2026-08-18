@@ -162,7 +162,7 @@ def archive_workspace(apply: bool):
         if free_bytes() < sz * 2:
             log(f"   PULANDO {d.name}: pouco espaco pra zip (precisa {human(sz)})")
             continue
-        zip_path = TMP / f"naia-ws-{d.name}.zip"
+        zip_path = TMP / f"maia-ws-{d.name}.zip"
         try:
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
                 for f in d.rglob("*"):

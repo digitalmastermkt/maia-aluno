@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 drive_auth_url.py — Etapa 1 do OAuth Google Drive (headless via Telegram/SSH).
-Espelha calendar_auth_url.py mas com scope MINIMO drive.file (a Naia so enxerga
+Espelha calendar_auth_url.py mas com scope MINIMO drive.file (a Maia so enxerga
 o que ela mesma cria no Drive). Reusa o mesmo app OAuth do Calendar (.env).
 
 Uso: /opt/MAIA/bot/venv/bin/python /opt/MAIA/bot/drive_auth_url.py

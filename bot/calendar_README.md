@@ -1,6 +1,6 @@
-# Google Calendar OAuth — Naia Master
+# Google Calendar OAuth — Maia Master
 
-Integracao OAuth 2.0 dedicada (alem do MCP) para a Naia ter controle TOTAL sobre
+Integracao OAuth 2.0 dedicada (alem do MCP) para a Maia ter controle TOTAL sobre
 a agenda do Chefe: criar, deletar, renomear calendarios, mudar timezone, etc.
 
 ## Arquivos
@@ -8,7 +8,7 @@ a agenda do Chefe: criar, deletar, renomear calendarios, mudar timezone, etc.
 | Arquivo | Funcao |
 |---|---|
 | `/opt/MAIA/bot/calendar_auth.py` | Fluxo OAuth inicial (rodar 1x) |
-| `/opt/MAIA/bot/calendar_api.py`  | Wrapper de alto nivel (Naia usa) |
+| `/opt/MAIA/bot/calendar_api.py`  | Wrapper de alto nivel (Maia usa) |
 | `/opt/MAIA/bot/.calendar_token.json` | refresh_token (chmod 600) |
 | `/opt/MAIA/bot/.env` | client_id + client_secret |
 | `/opt/MAIA/bot/logs/calendar.log` | Logs de cada operacao |
@@ -21,7 +21,7 @@ Acessar https://console.cloud.google.com (logado como
 `seu-email@gmail.com`):
 
 1. Topo da pagina, clicar no seletor de projetos -> `New Project`
-2. Nome: `naia-master-calendar` (ou qualquer outro)
+2. Nome: `maia-master-calendar` (ou qualquer outro)
 3. Aguardar ~30s ate criar e selecionar o projeto
 
 ### 2. Habilitar Google Calendar API
@@ -33,7 +33,7 @@ Acessar https://console.cloud.google.com (logado como
 
 1. Menu lateral -> `APIs & Services` -> `OAuth consent screen`
 2. User Type: `External` -> Create
-3. App name: `Naia Master Calendar`
+3. App name: `Maia Master Calendar`
 4. User support email: seu-email@gmail.com
 5. Developer contact: seu-email@gmail.com
 6. Avancar; em `Scopes` adicionar manualmente:
@@ -46,7 +46,7 @@ Acessar https://console.cloud.google.com (logado como
 1. Menu lateral -> `APIs & Services` -> `Credentials`
 2. `+ Create credentials` -> `OAuth client ID`
 3. Application type: **Desktop app**
-4. Name: `naia-cli`
+4. Name: `maia-cli`
 5. Create -> Google mostra Client ID e Client Secret -> copiar AMBOS
 
 ### 5. Salvar credenciais no servidor
@@ -79,7 +79,7 @@ OK — list_calendars() retornou N calendario(s):
   - Feriados no Brasil (id=...)
 ```
 
-## Como a Naia usa (exemplos)
+## Como a Maia usa (exemplos)
 
 ### Via Python (preferido, dentro de scripts)
 
@@ -123,14 +123,14 @@ $PY $API delete CAL_ID --confirm
 
 - **refresh_token NAO expira por tempo** se o app permanecer em modo Testing
   com o usuario como test_user, mas pode ser invalidado manualmente em
-  https://myaccount.google.com/permissions (procurar "Naia Master Calendar")
+  https://myaccount.google.com/permissions (procurar "Maia Master Calendar")
 - **access_token** expira em 1h e e renovado automaticamente pelo wrapper
   (a cada chamada, se necessario)
 - **Se o token for invalidado**: rodar de novo `calendar_auth.py` e refazer o
   fluxo de autorizacao
 - **Mudar de modo Testing -> Production**: nao precisa enquanto so o Chefe
   usar; em modo Testing vale 7 dias de inatividade — chamadas frequentes da
-  Naia nao deixam expirar
+  Maia nao deixam expirar
 
 ## Escopo
 

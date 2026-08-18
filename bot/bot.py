@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Naia Telegram Bot - External daemon
+Maia Telegram Bot - External daemon
 Independente do Claude Code. NUNCA morre quando Claude reinicia.
 - Recebe msgs via long polling (resilient)
-- Salva em inbox/, notifica Naia via tmux send-keys
+- Salva em inbox/, notifica Maia via tmux send-keys
 - Watch outbox/ e envia respostas via API
 """
 import os, json, time, logging, signal, sys, subprocess, threading, re, hashlib, uuid, base64, wave
@@ -38,8 +38,8 @@ if not TOKEN:
     sys.exit('TELEGRAM_BOT_TOKEN missing')
 
 ALLOWED_USERS = set((env.get('ALLOWED_USERS') or env.get('ADMIN_CHAT_ID') or os.environ.get('ADMIN_CHAT_ID', '')).split(','))
-TMUX_SESSION = env.get('TMUX_SESSION', 'naia')
-TMUX_USER = env.get('TMUX_USER', 'naia')
+TMUX_SESSION = env.get('TMUX_SESSION', 'maia')
+TMUX_USER = env.get('TMUX_USER', 'maia')
 # Nome do assistente exibido ao usuario final (white-label). Default: Maia
 ASSISTANT_NAME = env.get('ASSISTANT_NAME') or os.environ.get('ASSISTANT_NAME', 'Maia')
 # Handle minusculo derivado do nome (ex.: @maia) usado nas instrucoes ao usuario
@@ -63,11 +63,11 @@ ELEVENLABS_VOICE = env.get('ELEVENLABS_VOICE_ID') or os.environ.get('ELEVENLABS_
 GEMINI_KEY = env.get('GEMINI_API_KEY') or os.environ.get('GEMINI_API_KEY', '')
 GEMINI_TTS_MODEL = env.get('GEMINI_TTS_MODEL') or os.environ.get('GEMINI_TTS_MODEL', 'gemini-2.5-flash-preview-tts')
 GEMINI_TTS_VOICE = env.get('GEMINI_TTS_VOICE') or os.environ.get('GEMINI_TTS_VOICE', 'Kore')
-# VOZ OFICIAL DA NAIA (escolha Chefe opcao 3, 2026-06-05): voz Kore + sotaque
+# VOZ OFICIAL DA MAIA (escolha Chefe opcao 3, 2026-06-05): voz Kore + sotaque
 # nordestino. O sotaque vem de PREPENDAR esta instrucao de estilo ao texto.
-# Configuravel por env NAIA_VOICE_STYLE; default ja vale a nordestina.
-NAIA_VOICE_STYLE = (env.get('NAIA_VOICE_STYLE') or os.environ.get(
-    'NAIA_VOICE_STYLE',
+# Configuravel por env MAIA_VOICE_STYLE; default ja vale a nordestina.
+MAIA_VOICE_STYLE = (env.get('MAIA_VOICE_STYLE') or os.environ.get(
+    'MAIA_VOICE_STYLE',
     'Narre com sotaque nordestino brasileiro marcante, tom caloroso e animado'))
 VOICE_ENGINE = (env.get('VOICE_ENGINE') or os.environ.get('VOICE_ENGINE', 'gemini')).strip().lower()
 AUDIO_IN = BOT_DIR / 'audio' / 'incoming'
@@ -77,7 +77,7 @@ AUDIO_OUT.mkdir(parents=True, exist_ok=True)
 # Video original recebido no grupo/DM (necessario pra edicao posterior)
 VIDEO_IN = BOT_DIR / 'videos' / 'incoming'
 VIDEO_IN.mkdir(parents=True, exist_ok=True)
-# Fotos/PDFs/documentos recebidos no grupo/DM (Naia analisa via referencia no inbox).
+# Fotos/PDFs/documentos recebidos no grupo/DM (Maia analisa via referencia no inbox).
 PHOTO_IN = BOT_DIR / 'images' / 'incoming-user'
 DOC_IN = BOT_DIR / 'documents' / 'incoming'
 PHOTO_IN.mkdir(parents=True, exist_ok=True)
@@ -110,16 +110,16 @@ typing_until = {}
 typing_lock = threading.Lock()
 running = True
 
-# Debounce: aguarda N segundos sem nova msg antes de injetar pra Naia.
+# Debounce: aguarda N segundos sem nova msg antes de injetar pra Maia.
 # Quando chega nova msg, reseta o timer. Permite o usuario mandar msgs quebradas
-# em sequencia que sao agrupadas como contexto unico antes de chegar na Naia.
+# em sequencia que sao agrupadas como contexto unico antes de chegar na Maia.
 DEBOUNCE_SECONDS = float(env.get('DEBOUNCE_SECONDS', '8'))
 pending_buffer = []  # list of dicts: {msg_id, text, user, chat_id}
 debounce_timer = None
 debounce_lock = threading.Lock()
 
-# Watchdog: detecta Naia silenciosa (rate limit, erro 400, Claude travada, tmux quebrada)
-NAIA_TIMEOUT_SECONDS = float(env.get('NAIA_TIMEOUT_SECONDS', '600'))  # 10min sem resposta = alerta (tarefa com imagem passa de 5min)
+# Watchdog: detecta Maia silenciosa (rate limit, erro 400, Claude travada, tmux quebrada)
+MAIA_TIMEOUT_SECONDS = float(env.get('MAIA_TIMEOUT_SECONDS', '600'))  # 10min sem resposta = alerta (tarefa com imagem passa de 5min)
 HEALTHCHECK_INTERVAL = float(env.get('HEALTHCHECK_INTERVAL', '120'))
 HEALTHCHECK_ALERT_THROTTLE = float(env.get('HEALTHCHECK_ALERT_THROTTLE', '1800'))
 TMUX_SOCKET = env.get('TMUX_SOCKET', '/tmp/tmux-1001/default')
@@ -130,16 +130,16 @@ try:
     ADMIN_CHAT_ID = int((env.get('ADMIN_CHAT_ID') or os.environ.get('ADMIN_CHAT_ID') or next(iter(ALLOWED_USERS))).strip())
 except Exception:
     ADMIN_CHAT_ID = 0
-pending_naia = {}  # msg_id -> {'notified_at', 'chat_id', 'last_alert_at'}
-pending_naia_lock = threading.Lock()
+pending_maia = {}  # msg_id -> {'notified_at', 'chat_id', 'last_alert_at'}
+pending_maia_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # Group mode (adicionado 2026-05-21)
 # Bot opera em DM (compat antigo) + 1 grupo whitelisted.
 # Mensagens em grupo so sao processadas quando:
-#   - chat_id == NAIA_GROUP_CHAT_ID (configurado/auto-capturado)
-#   - texto contem NAIA_GROUP_TRIGGER (case-insensitive)
-#   - user_id pertence a NAIA_GROUP_USER_WHITELIST (CSV)
+#   - chat_id == MAIA_GROUP_CHAT_ID (configurado/auto-capturado)
+#   - texto contem MAIA_GROUP_TRIGGER (case-insensitive)
+#   - user_id pertence a MAIA_GROUP_USER_WHITELIST (CSV)
 # Tudo fora disso e ignorado silenciosamente (log em logs/group.log).
 # Comandos admin sao aceitos APENAS no DM do Chefe:
 #   /group_status, /add_user_to_group_wl, /remove_user_from_group_wl, /confirmgroup
@@ -187,7 +187,7 @@ def _write_env_value(key, value):
 
 def get_group_chat_id():
     """Le chat_id do grupo do .env. Vazio = nao capturado ainda."""
-    raw = _read_env_value('NAIA_GROUP_CHAT_ID', '').strip()
+    raw = _read_env_value('MAIA_GROUP_CHAT_ID', '').strip()
     if not raw:
         return None
     try:
@@ -196,46 +196,46 @@ def get_group_chat_id():
         return None
 
 def get_group_trigger():
-    return _read_env_value('NAIA_GROUP_TRIGGER', ASSISTANT_HANDLE).strip().lower()
+    return _read_env_value('MAIA_GROUP_TRIGGER', ASSISTANT_HANDLE).strip().lower()
 
 def get_group_user_whitelist():
     """Retorna set de user_ids (str) autorizados a falar no grupo."""
-    raw = _read_env_value('NAIA_GROUP_USER_WHITELIST', str(ADMIN_CHAT_ID))
+    raw = _read_env_value('MAIA_GROUP_USER_WHITELIST', str(ADMIN_CHAT_ID))
     return {x.strip() for x in raw.split(',') if x.strip()}
 
 def get_group_open_membership():
     """Se True, qualquer user do grupo confirmado pode interagir (sem whitelist por user).
     Mantém alerta DM informativo pro Chefe na 1a interação de cada user novo.
     """
-    raw = _read_env_value('NAIA_GROUP_OPEN_MEMBERSHIP', 'false')
+    raw = _read_env_value('MAIA_GROUP_OPEN_MEMBERSHIP', 'false')
     return str(raw).strip().lower() in ('true', '1', 'yes', 'on')
 
 def get_group_always_on():
     """Se True, o grupo confirmado opera em modo SEMPRE-ABERTO: toda mensagem
     (de users autorizados) e processada SEM exigir @trigger nem sessao.
     Usado pra grupos dedicados (ex: grupo que so usuarios autorizados usam pra falar
-    com a Naia). Se False, mantem o comportamento antigo (trigger + sessao).
+    com a Maia). Se False, mantem o comportamento antigo (trigger + sessao).
     """
-    raw = _read_env_value('NAIA_GROUP_ALWAYS_ON', 'false')
+    raw = _read_env_value('MAIA_GROUP_ALWAYS_ON', 'false')
     return str(raw).strip().lower() in ('true', '1', 'yes', 'on')
 
 def set_group_chat_id(chat_id):
-    return _write_env_value('NAIA_GROUP_CHAT_ID', str(chat_id))
+    return _write_env_value('MAIA_GROUP_CHAT_ID', str(chat_id))
 
 def add_user_to_group_whitelist(user_id):
     current = get_group_user_whitelist()
     current.add(str(user_id).strip())
-    return _write_env_value('NAIA_GROUP_USER_WHITELIST', ','.join(sorted(current)))
+    return _write_env_value('MAIA_GROUP_USER_WHITELIST', ','.join(sorted(current)))
 
 def remove_user_from_group_whitelist(user_id):
     current = get_group_user_whitelist()
     current.discard(str(user_id).strip())
-    return _write_env_value('NAIA_GROUP_USER_WHITELIST', ','.join(sorted(current)))
+    return _write_env_value('MAIA_GROUP_USER_WHITELIST', ','.join(sorted(current)))
 
 # ---------------------------------------------------------------------------
 # Group session mode (2026-05-21)
-# Primeira msg com @naia no grupo abre uma SESSAO de N minutos (default 10).
-# Durante a sessao, TODAS as msgs do grupo sao processadas sem precisar de @naia.
+# Primeira msg com @maia no grupo abre uma SESSAO de N minutos (default 10).
+# Durante a sessao, TODAS as msgs do grupo sao processadas sem precisar de @maia.
 # Sessao encerra com /sair ou apos N min sem nova msg (sliding window).
 # Sessao e por chat_id (todos no grupo participam da mesma sessao).
 # Estado persistido em /opt/MAIA/bot/group_sessions.json.
@@ -245,7 +245,7 @@ GROUP_SESSIONS_LOCK = threading.Lock()
 
 def get_group_session_timeout_min():
     """Le timeout (em minutos) da sessao de grupo do .env. Default 10."""
-    raw = _read_env_value('NAIA_GROUP_SESSION_TIMEOUT_MIN', '10').strip()
+    raw = _read_env_value('MAIA_GROUP_SESSION_TIMEOUT_MIN', '10').strip()
     try:
         v = int(raw)
         return v if v > 0 else 10
@@ -338,7 +338,7 @@ def close_group_session(chat_id):
 
 def _send_group_text(chat_id, text, reply_to=None):
     """Envia texto ao grupo via outbox (NUNCA via API direta — regra critica CLAUDE.md).
-    Marca como auto-mensagem pra nao disparar mark_naia_responded (so reage a outbox
+    Marca como auto-mensagem pra nao disparar mark_maia_responded (so reage a outbox
     de resposta direta a usuario). Como o bot proprio gera, marcamos suffix _bot.
     """
     try:
@@ -409,7 +409,7 @@ def _session_cleanup_loop():
         time.sleep(30)
 
 # Logger dedicado pro grupo (mensagens ignoradas, capturas, alertas)
-_group_logger = logging.getLogger('naia.group')
+_group_logger = logging.getLogger('maia.group')
 _group_logger.setLevel(logging.INFO)
 _group_logger.propagate = False
 _group_handler = logging.FileHandler(LOGS / 'group.log')
@@ -439,7 +439,7 @@ def _send_admin_outbox_text(text, prefix='group_admin'):
 # ---------------------------------------------------------------------------
 # Claude Code interactive prompt interception
 # ---------------------------------------------------------------------------
-# A Naia roda num Claude Code CLI dentro da sessao tmux. Quando o Claude pede
+# A Maia roda num Claude Code CLI dentro da sessao tmux. Quando o Claude pede
 # autorizacao do usuario (editar arquivo, rodar comando, telemetria) ele renderiza
 # um prompt interativo do tipo:
 #
@@ -448,13 +448,13 @@ def _send_admin_outbox_text(text, prefix='group_admin'):
 #     2. Yes, and don't ask again this session (shift+tab)
 #     3. No, and tell Claude what to do differently (esc)
 #
-# Como o Chefe so interage por Telegram, sem essa interceptacao a Naia trava
+# Como o Chefe so interage por Telegram, sem essa interceptacao a Maia trava
 # indefinidamente. Esse modulo detecta esses prompts no capture-pane, manda
 # InlineKeyboardMarkup pro Telegram, e quando o Chefe clica no botao envia o
 # numero correspondente via `tmux send-keys` pra desbloquear.
 #
 # IMPORTANTE (regra critica do CLAUDE.md): toda mensagem enviada ao Chefe
-# fora do canal /opt/MAIA/bot/outbox/ DEVE chamar `mark_naia_responded()`
+# fora do canal /opt/MAIA/bot/outbox/ DEVE chamar `mark_maia_responded()`
 # pra nao estourar o watchdog. Isso vale tanto pra mensagem com botoes quanto
 # pra resposta do callback.
 CLAUDE_PROMPT_POLL_INTERVAL = float(env.get('CLAUDE_PROMPT_POLL_INTERVAL', '2'))
@@ -590,7 +590,7 @@ def flush_pending():
         joined = '\n'.join(i['text'] for i in items)
         text = f'[debounced {len(items)} msgs ids={ids}] {joined}'
         log.info(f'debounce flush: {len(items)} msgs combinadas, last_id={msg_id}')
-    notify_naia(msg_id, text, user, chat_id)
+    notify_maia(msg_id, text, user, chat_id)
 
 def enqueue_message(msg_id, text, user, chat_id):
     """Adiciona msg ao buffer e (re)agenda o flush para DEBOUNCE_SECONDS."""
@@ -625,7 +625,7 @@ def get_offset():
 def save_offset(uid):
     (STATE / 'last-update-id.txt').write_text(str(uid))
 
-def notify_naia(msg_id, text, user, chat_id=None):
+def notify_maia(msg_id, text, user, chat_id=None):
     try:
         # Escapa aspas e quebras de linha pra tmux
         safe = text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
@@ -645,27 +645,27 @@ def notify_naia(msg_id, text, user, chat_id=None):
             check=False, timeout=5,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        log.info(f'Naia notificada msg_id={msg_id}')
-        mark_naia_notified(msg_id, chat_id)
+        log.info(f'Maia notificada msg_id={msg_id}')
+        mark_maia_notified(msg_id, chat_id)
     except Exception as e:
-        log.error(f'notify_naia error: {e}')
+        log.error(f'notify_maia error: {e}')
 
-def mark_naia_notified(msg_id, chat_id):
-    with pending_naia_lock:
-        pending_naia[msg_id] = {
+def mark_maia_notified(msg_id, chat_id):
+    with pending_maia_lock:
+        pending_maia[msg_id] = {
             'notified_at': time.time(),
             'chat_id': chat_id or ADMIN_CHAT_ID,
             'last_alert_at': 0,
         }
 
-def mark_naia_responded():
+def mark_maia_responded():
     """Chamado quando uma resposta sai pro Telegram. Limpa todas as expectativas
-    pendentes (Naia normalmente envia uma resposta consolidando todas as msgs do debounce)."""
-    with pending_naia_lock:
-        if pending_naia:
-            pending_naia.clear()
+    pendentes (Maia normalmente envia uma resposta consolidando todas as msgs do debounce)."""
+    with pending_maia_lock:
+        if pending_maia:
+            pending_maia.clear()
 
-def capture_naia_pane():
+def capture_maia_pane():
     try:
         r = subprocess.run(
             ['tmux', '-S', TMUX_SOCKET, 'capture-pane', '-t', TMUX_SESSION, '-p'],
@@ -702,21 +702,21 @@ def diagnose_pane(pane_text):
         return 'falha de DNS'
     return None
 
-# Sinais de que a Naia esta ATIVAMENTE trabalhando (turn em andamento) — usado
+# Sinais de que a Maia esta ATIVAMENTE trabalhando (turn em andamento) — usado
 # pelo watchdog pra NAO confundir "lenta" com "travada". Regra de memoria:
-# "Naia lenta != travada — medir antes de propor reset".
-NAIA_WORKING_RE = re.compile(
+# "Maia lenta != travada — medir antes de propor reset".
+MAIA_WORKING_RE = re.compile(
     r'esc to interrupt'            # Claude Code so mostra isso com um turn rodando
     r'|still thinking'             # raciocinio em andamento
     r'|[\u2191\u2193]\s*[\d.,]+\s*tokens',  # streaming de tokens (up/down)
     re.IGNORECASE,
 )
 
-def is_naia_working(pane_text):
+def is_maia_working(pane_text):
     """True se o pane mostra que ela esta gerando/pensando agora (nao travada)."""
     if not pane_text:
         return False
-    return bool(NAIA_WORKING_RE.search(pane_text))
+    return bool(MAIA_WORKING_RE.search(pane_text))
 
 # Ruido do TUI que nao ajuda no diagnostico e so polui o alerta no DM.
 _ALERT_NOISE = (
@@ -905,7 +905,7 @@ CLAUDE_VERB_LABELS = {
 def send_claude_prompt_buttons(kind, extra, pane_text):
     """Envia mensagem com InlineKeyboardMarkup pro Chefe pedindo decisao.
     Retorna (ok, telegram_message_id, callback_id).
-    Apos enviar com sucesso, chama mark_naia_responded() — regra critica do CLAUDE.md.
+    Apos enviar com sucesso, chama mark_maia_responded() — regra critica do CLAUDE.md.
     """
     callback_id = uuid.uuid4().hex[:12]
     snippet = extract_prompt_snippet(pane_text, kind)
@@ -953,7 +953,7 @@ def send_claude_prompt_buttons(kind, extra, pane_text):
                 'created_at': time.time(),
             }
         # CRITICO: avisa o watchdog que respondemos algo ao Chefe fora do outbox.
-        mark_naia_responded()
+        mark_maia_responded()
         stop_typing(ADMIN_CHAT_ID)
         log.info(f'claude_prompt botoes enviados kind={kind} callback_id={callback_id} tg_msg_id={tg_msg_id}')
         return True, tg_msg_id, callback_id
@@ -1253,7 +1253,7 @@ def handle_claude_prompt_callback(callback_query):
             except Exception as e:
                 log.warning(f'editMessageText erro: {e}')
         # Regra critica: resposta enviada ao Chefe fora do outbox -> avisa watchdog
-        mark_naia_responded()
+        mark_maia_responded()
         log.info(f'claude_prompt callback processado callback_id={cb_id} choice={choice} keys_ok={ok_keys}')
         return True
     except Exception as e:
@@ -1263,7 +1263,7 @@ def handle_claude_prompt_callback(callback_query):
 
 def watchdog_loop():
     log.info(
-        f'watchdog iniciado (timeout={NAIA_TIMEOUT_SECONDS}s, '
+        f'watchdog iniciado (timeout={MAIA_TIMEOUT_SECONDS}s, '
         f'check={HEALTHCHECK_INTERVAL}s, throttle={HEALTHCHECK_ALERT_THROTTLE}s, '
         f'admin_chat_id={ADMIN_CHAT_ID})'
     )
@@ -1276,19 +1276,19 @@ def watchdog_loop():
         try:
             now = time.time()
             stale = []
-            with pending_naia_lock:
-                for mid, st in pending_naia.items():
+            with pending_maia_lock:
+                for mid, st in pending_maia.items():
                     age = now - st['notified_at']
                     since_alert = now - st['last_alert_at']
-                    if age > NAIA_TIMEOUT_SECONDS and since_alert > HEALTHCHECK_ALERT_THROTTLE:
+                    if age > MAIA_TIMEOUT_SECONDS and since_alert > HEALTHCHECK_ALERT_THROTTLE:
                         stale.append((mid, age, st))
             for mid, age, st in stale:
-                pane = capture_naia_pane()
+                pane = capture_maia_pane()
                 # Mede antes de gritar: se ela esta gerando/pensando agora, NAO e
                 # travamento — e tarefa longa. Suprime o alerta e segue vigiando.
-                if is_naia_working(pane):
+                if is_maia_working(pane):
                     log.info(
-                        f'WATCHDOG: msg_id={mid} idade={int(age)}s — Naia ATIVA '
+                        f'WATCHDOG: msg_id={mid} idade={int(age)}s — Maia ATIVA '
                         f'(turn em andamento), alerta suprimido'
                     )
                     continue
@@ -1300,9 +1300,9 @@ def watchdog_loop():
                     f'_Ultimas linhas da tmux:_\n```\n{snippet}\n```'
                 )
                 send_admin_alert(msg)
-                with pending_naia_lock:
-                    if mid in pending_naia:
-                        pending_naia[mid]['last_alert_at'] = now
+                with pending_maia_lock:
+                    if mid in pending_maia:
+                        pending_maia[mid]['last_alert_at'] = now
                 log.warning(f'WATCHDOG alerta enviado: msg_id={mid} idade={int(age)}s causa={cause!r}')
         except Exception as e:
             log.error(f'watchdog loop error: {e}')
@@ -1798,18 +1798,18 @@ def transcribe_telegram_audio(msg, *, context_label='dm'):
 
 
 def synthesize_gemini(text, msg_id):
-    """Gera audio via Gemini TTS - VOZ OFICIAL DA NAIA (voz Kore + sotaque
+    """Gera audio via Gemini TTS - VOZ OFICIAL DA MAIA (voz Kore + sotaque
     nordestino, escolha Chefe opcao 3 / 2026-06-05). Converte pra OGG opus
     (formato Telegram voice). Gemini retorna PCM 16-bit mono 24kHz.
-    O sotaque vem de PREPENDAR NAIA_VOICE_STYLE ao texto a narrar.
-    Receita espelhada em /opt/MAIA/integrations/naia-voice/gerar_voz_naia.py.
+    O sotaque vem de PREPENDAR MAIA_VOICE_STYLE ao texto a narrar.
+    Receita espelhada em /opt/MAIA/integrations/maia-voice/gerar_voz_maia.py.
     Retorna path do .ogg ou None (None dispara fallback ElevenLabs)."""
     if not GEMINI_KEY:
         log.error('GEMINI_API_KEY missing - sem Gemini TTS')
         return None
     try:
         # Prependa a instrucao de estilo (sotaque nordestino) ao texto
-        style = (NAIA_VOICE_STYLE or '').strip()
+        style = (MAIA_VOICE_STYLE or '').strip()
         prompt = f'{style}: {text}' if style else text
         url = (f'https://generativelanguage.googleapis.com/v1beta/models/'
                f'{GEMINI_TTS_MODEL}:generateContent?key={GEMINI_KEY}')
@@ -1873,7 +1873,7 @@ def synthesize_voice(text, msg_id):
     ogg = synthesize_gemini(text, msg_id)
     if ogg:
         return ogg
-    # ATENCAO: se este aviso aparecer, o audio NAO saiu na voz oficial da Naia.
+    # ATENCAO: se este aviso aparecer, o audio NAO saiu na voz oficial da Maia.
     # E o sinal de "voz errada" (ElevenLabs Rachel). Investigar a falha do Gemini acima.
     log.warning('VOZ-ERRADA: gemini tts falhou - caindo pro fallback ElevenLabs '
                 '(audio NAO sai na voz oficial nordestina)')
@@ -2043,7 +2043,7 @@ def process_document_outbox(outbox_file, data):
             }, indent=2, ensure_ascii=False))
             outbox_file.unlink()
             log.info(f'sent document(s) {outbox_file.name} n={len(results)}')
-            mark_naia_responded()
+            mark_maia_responded()
         else:
             log.warning(f'send_documents falhou {outbox_file.name}: {results}')
             failed_path = outbox_file.with_suffix('.failed')
@@ -2137,7 +2137,7 @@ def process_image_outbox(outbox_file, data):
             }, indent=2, ensure_ascii=False))
             outbox_file.unlink()
             log.info(f'sent image(s) {outbox_file.name} n={len(paths)}')
-            mark_naia_responded()
+            mark_maia_responded()
         else:
             log.warning(f'send_images falhou {outbox_file.name}: {resp}')
             outbox_file.rename(outbox_file.with_suffix('.failed'))
@@ -2232,7 +2232,7 @@ def process_instagram_publish_outbox(outbox_file, data):
             outbox_file.unlink()
             log.info(f'instagram publish OK {outbox_file.name} -> {permalink}')
             try:
-                mark_naia_responded()
+                mark_maia_responded()
             except Exception:
                 pass
         else:
@@ -2249,7 +2249,7 @@ def process_instagram_publish_outbox(outbox_file, data):
                 payload['reply_parameters'] = {'message_id': int(reply_to)}
             requests.post(f'{API}/sendMessage', json=payload, timeout=10)
             try:
-                mark_naia_responded()
+                mark_maia_responded()
             except Exception:
                 pass
         except Exception:
@@ -2435,12 +2435,12 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
     Aplica checks (chat_id whitelist, trigger no texto, user_id whitelist).
     Retorna True se a mensagem foi processada (chamador para fluxo). False se ignorada.
 
-    Auto-captura: se NAIA_GROUP_CHAT_ID estiver vazio na primeira msg de grupo,
+    Auto-captura: se MAIA_GROUP_CHAT_ID estiver vazio na primeira msg de grupo,
     captura e alerta o Chefe via DM pedindo /confirmgroup.
     Auto-deteccao de user novo: se chat_id casa mas user_id NAO esta na whitelist,
     alerta o Chefe pedindo /add_user_to_group_wl.
 
-    Modo open-membership (NAIA_GROUP_OPEN_MEMBERSHIP=true): pula o check de user_id
+    Modo open-membership (MAIA_GROUP_OPEN_MEMBERSHIP=true): pula o check de user_id
     e permite qualquer participante do grupo confirmado interagir. Mantém o alerta
     DM informativo (throttled 1h) na primeira interação de cada user fora da whitelist.
     """
@@ -2508,7 +2508,7 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
                     f'A interação NÃO foi bloqueada (modo aberto).\n'
                     f'Pra remover esse user de futuras interações:\n'
                     f'/remove_user_from_group_wl {user_id}\n'
-                    f'(e setar NAIA_GROUP_OPEN_MEMBERSHIP=false no .env pra voltar ao modo whitelist)'
+                    f'(e setar MAIA_GROUP_OPEN_MEMBERSHIP=false no .env pra voltar ao modo whitelist)'
                 )
                 alert_prefix = 'group_open_member'
             else:
@@ -2535,8 +2535,8 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
         )
 
     # CHECK 3: sessao OU trigger no texto?
-    # Modo SESSAO (2026-05-21): primeira msg com @naia abre sessao de N min.
-    # Durante a sessao, TODAS as msgs do grupo sao processadas sem precisar @naia.
+    # Modo SESSAO (2026-05-21): primeira msg com @maia abre sessao de N min.
+    # Durante a sessao, TODAS as msgs do grupo sao processadas sem precisar @maia.
     # /sair encerra a sessao imediato.
 
     text_stripped = (text or '').strip()
@@ -2563,7 +2563,7 @@ def handle_group_message(msg, msg_id, chat_id, user_id, text):
         # Em qualquer caso, NAO processa a msg normalmente
         return False
 
-    # 3a-bis) MODO SEMPRE-ABERTO (NAIA_GROUP_ALWAYS_ON=true):
+    # 3a-bis) MODO SEMPRE-ABERTO (MAIA_GROUP_ALWAYS_ON=true):
     # grupo dedicado — toda msg de user autorizado e processada sem trigger/sessao.
     # Ja passou pelos checks de chat_id (CHECK 1) e user/open_membership (CHECK 2),
     # entao aqui basta aceitar. /sair acima continua sendo interceptado.
@@ -2714,7 +2714,7 @@ def handle_update(update):
                         f'kind={group_visual_info["kind"]} erro={group_visual_info["error"]}'
                     )
                     return
-                # Sucesso — monta texto sintetico pra Naia ver que chegou midia.
+                # Sucesso — monta texto sintetico pra Maia ver que chegou midia.
                 # Preserva a legenda do usuario junto do marcador (fix caption 2026-05-29).
                 user_name = (msg.get('from', {}) or {}).get('first_name', user_id)
                 _caption = text  # 'text' aqui ainda eh a legenda original (ou vazio)
@@ -2835,7 +2835,7 @@ def handle_update(update):
         log.info(f'msg recebida (group) msg_id={msg_id} chat_id={chat_id} from={user_name}: {text[:80]}')
         react(chat_id, msg_id, '👀')
         start_typing(chat_id, duration=600)
-        # Prefixo no texto pra Naia saber que a resposta vai pro grupo
+        # Prefixo no texto pra Maia saber que a resposta vai pro grupo
         # e tambem o user que falou. Mantemos o chat_id por baixo da injecao.
         prefixed = f'[grupo chat_id={chat_id} from={user_name}({user_id})] {text}'
         enqueue_message(msg_id, prefixed, user_name, chat_id)
@@ -2860,7 +2860,7 @@ def handle_update(update):
             text = f'({audio_kind} - transcricao falhou)'
 
     # Foto/documento em DM (adicionado 2026-05-25). Sem audio mas com photo/doc:
-    # baixa e injeta referencia no inbox pra Naia conseguir analisar.
+    # baixa e injeta referencia no inbox pra Maia conseguir analisar.
     dm_visual_info = None
     if not audio_file_id:
         dm_visual_info = extract_visual_media_from_msg(msg, msg_id)
@@ -2886,7 +2886,7 @@ def handle_update(update):
                     f'DM midia visual download FALHOU msg_id={msg_id} '
                     f'kind={dm_visual_info["kind"]} erro={dm_visual_info["error"]}'
                 )
-                # Segue fluxo com text=(non-text) — Naia avisa o user
+                # Segue fluxo com text=(non-text) — Maia avisa o user
             else:
                 _caption = text  # legenda original (ou vazio) antes de sobrescrever
                 if dm_visual_info['kind'] == 'photo':
@@ -3067,7 +3067,7 @@ def outbox_loop():
                         }, indent=2, ensure_ascii=False))
                         f.unlink()
                         log.info(f'sent {f.name}')
-                        mark_naia_responded()
+                        mark_maia_responded()
                     else:
                         log.warning(f'send fail {f.name}: {r.text[:200]}')
                         f.rename(f.with_suffix('.failed'))
@@ -3080,7 +3080,7 @@ def outbox_loop():
         time.sleep(2)
 
 if __name__ == '__main__':
-    log.info('=== Naia Telegram Bot iniciando ===')
+    log.info('=== Maia Telegram Bot iniciando ===')
     try:
         r = requests.get(f'{API}/getMe', timeout=10)
         info = r.json().get('result', {})

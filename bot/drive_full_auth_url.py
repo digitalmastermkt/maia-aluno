@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Gera URL OAuth com escopo FULL drive (escreve em pastas existentes do dono).
-Estado salvo em .drive_full_auth_state.json (legivel por naia).
+Estado salvo em .drive_full_auth_state.json (legivel por maia).
 Uso: venv/bin/python drive_full_auth_url.py"""
 import json, os, sys
 from pathlib import Path
