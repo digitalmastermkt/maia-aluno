@@ -99,6 +99,41 @@ if [ -d "$MAIA_HOME/dotclaude" ]; then
   echo "materializado: $MAIA_HOME/.claude (skills da base) a partir de dotclaude/"
 fi
 
+# Settings do PROJETO ($MAIA_HOME/.claude/settings.json): o Claude roda com cd $MAIA_HOME.
+_PYBIN="$(command -v python3 || echo python3)"
+_SET="$MAIA_HOME/.claude/settings.json"
+mkdir -p "$MAIA_HOME/.claude"; [ -f "$_SET" ] || echo '{}' > "$_SET"
+# TRAVA tmux: hook PreToolUse (matcher Bash) que bloqueia limpeza de disco que atinja
+# /tmp/tmux-* (socket por onde o bot entrega as mensagens via tmux send-keys) ou glob amplo
+# de /tmp. Incidente 24/11/2026: limpeza apagou /tmp/tmux-<uid> e a MAIA ficou ~45 min muda.
+# Vale na sessao principal e nos subagentes. Idempotente (nao duplica). Log: $MAIA_HOME/logs/tmux_guard.log
+if [ -f "$MAIA_HOME/.claude/hooks/tmux_guard.py" ]; then
+  chmod 0755 "$MAIA_HOME/.claude/hooks/tmux_guard.py"
+  "$_PYBIN" - "$_SET" "python3 $MAIA_HOME/.claude/hooks/tmux_guard.py $MAIA_HOME" <<'PY'
+import json, sys
+p, cmd = sys.argv[1], sys.argv[2]
+try:
+    d = json.load(open(p, encoding='utf-8'))
+    if not isinstance(d, dict):
+        d = {}
+except Exception:
+    d = {}
+h = d.setdefault('hooks', {})
+pre = h.get('PreToolUse')
+if not isinstance(pre, list):
+    pre = []
+    h['PreToolUse'] = pre
+achou = any(isinstance(g, dict) and any(isinstance(e, dict) and 'tmux_guard.py' in str(e.get('command', ''))
+            for e in (g.get('hooks') or [])) for g in pre)
+if not achou:
+    pre.append({"matcher": "Bash", "hooks": [{"type": "command", "command": cmd, "timeout": 10}]})
+with open(p, 'w', encoding='utf-8') as f:
+    json.dump(d, f, ensure_ascii=False, indent=2)
+    f.write('\n')
+print("  - trava tmux (PreToolUse Bash):", "ja presente" if achou else "registrada", "->", p)
+PY
+fi
+
 # .env a partir do template (so se nao existir)
 if [ ! -f "$MAIA_HOME/bot/.env" ]; then
   cp "$MAIA_HOME/bot/.env.TEMPLATE" "$MAIA_HOME/bot/.env"
@@ -156,6 +191,21 @@ systemctl daemon-reload
 # Garante DISABLED e parado ate o .env estar preenchido
 systemctl disable maia-telegram-bot 2>/dev/null || true
 systemctl stop maia-telegram-bot 2>/dev/null || true
+
+# ------------------------------------------------------------
+# Vigia do socket tmux (cron ROOT de minuto): se uma limpeza de /tmp apagar o socket
+# /tmp/tmux-<uid>/<label>, manda SIGUSR1 ao tmux server, que recria o socket sem derrubar
+# a sessao (incidente 24/11/2026: bot ficou ~45 min mudo). Idempotente (nao duplica a linha).
+log "7b/8 Vigia do socket tmux (cron root de minuto)"
+install -m 0755 "$SRC_DIR/scripts/tmux-socket-guard.sh" /usr/local/bin/tmux-socket-guard.sh
+TMUXG_CRON_LINE="* * * * * /usr/local/bin/tmux-socket-guard.sh # recria socket tmux apagado (incidente 24/11/2026)"
+_cur_cron_tg="$(crontab -l 2>/dev/null || true)"
+if printf '%s\n' "$_cur_cron_tg" | grep -Fq "/usr/local/bin/tmux-socket-guard.sh"; then
+  echo "vigia do socket tmux ja presente no crontab do root — nada a fazer"
+else
+  { [ -n "$_cur_cron_tg" ] && printf '%s\n' "$_cur_cron_tg"; printf '%s\n' "$TMUXG_CRON_LINE"; } | crontab -
+  echo "vigia do socket tmux instalado no crontab do root (* * * * *)"
+fi
 
 # ------------------------------------------------------------
 log "8/8 Permissoes"

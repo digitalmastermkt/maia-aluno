@@ -195,3 +195,8 @@ Bot Telegram: systemd maia-telegram-bot (User=maia, /opt/MAIA/bot)
 Sessao tmux: maia-master (User=maia)
 Timezone: America/Sao_Paulo
 Memoria semantica (porta 3007): NAO instalada na base — upgrade opcional.
+
+## Limpeza de disco: NUNCA tocar em /tmp/tmux-*
+Em 24/11/2026 uma limpeza de disco apagou /tmp/tmux-<uid> e o bot ficou ~45 min sem entregar mensagens ao dono (o bot entrega via `tmux send-keys` nesse socket). Em qualquer limpeza de /tmp, excluir /tmp/tmux-* e sockets: `find /tmp ... ! -path "/tmp/tmux-*" ! -type s`.
+TRAVA REAL: hook PreToolUse (Bash) `/opt/MAIA/.claude/hooks/tmux_guard.py` (registrado no settings.json do Claude) bloqueia rm/find -delete/mv/etc. que atinja /tmp/tmux-* ou glob amplo de /tmp. Se bloquear, refaca com a exclusao acima; nao contorne.
+Rede de seguranca: cron root `/usr/local/bin/tmux-socket-guard.sh` recria o socket em ate 1 min.
